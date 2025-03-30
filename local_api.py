@@ -1,38 +1,34 @@
+import requests
 import json
 
-import requests
-
-# TODO: send a GET using the URL http://127.0.0.1:8000
-r = None # Your code here
-
-# TODO: print the status code
-# print()
-# TODO: print the welcome message
-# print()
+#url = "enter heroku web app url here"
+url = "https://udacity-fastapi-app.herokuapp.com/inference"
 
 
+# explicit the sample to perform inference on
+sample =  { 'age':50,
+            'workclass':"Private", 
+            'fnlgt':234721,
+            'education':"Doctorate",
+            'education_num':16,
+            'marital_status':"Separated",
+            'occupation':"Exec-managerial",
+            'relationship':"Not-in-family",
+            'race':"Black",
+            'sex':"Female",
+            'capital_gain':0,
+            'capital_loss':0,
+            'hours_per_week':50,
+            'native_country':"United-States"
+            }
 
-data = {
-    "age": 37,
-    "workclass": "Private",
-    "fnlgt": 178356,
-    "education": "HS-grad",
-    "education-num": 10,
-    "marital-status": "Married-civ-spouse",
-    "occupation": "Prof-specialty",
-    "relationship": "Husband",
-    "race": "White",
-    "sex": "Male",
-    "capital-gain": 0,
-    "capital-loss": 0,
-    "hours-per-week": 40,
-    "native-country": "United-States",
-}
+data = json.dumps(sample)
 
-# TODO: send a POST using the data above
-r = None # Your code here
+# post to API and collect response
+response = requests.post(url, data=data )
 
-# TODO: print the status code
-# print()
-# TODO: print the result
-# print()
+# display output - response will show sample details + model prediction added
+print("response status code", response.status_code)
+print("response content:")
+print(response.json())
+
