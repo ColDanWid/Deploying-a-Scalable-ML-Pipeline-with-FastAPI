@@ -1,3 +1,10 @@
+# path to saved artifacts
+savepath = './model'
+filename = ['trained_model.pkl', 'encoder.pkl', 'labelizer.pkl']
+model = None
+encoder = None
+lb = None
+
 from fastapi import FastAPI, HTTPException
 from typing import Union, Optional
 # BaseModel from Pydantic is used to define data objects
