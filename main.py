@@ -56,13 +56,16 @@ app = FastAPI(  title="Inference API",
 @app.on_event("startup")
 async def startup_event(): 
     global model, encoder, lb
-    # if saved model exists, load the model from disk
-    if os.path.isfile(os.path.join(savepath, filename[0])) and \
-       os.path.isfile(os.path.join(savepath, filename[1])) and \
-       os.path.isfile(os.path.join(savepath, filename[2])):
-        model = pickle.load(open(os.path.join(savepath, filename[0]), "rb"))
-        encoder = pickle.load(open(os.path.join(savepath, filename[1]), "rb"))
-        lb = pickle.load(open(os.path.join(savepath, filename[2]), "rb"))
+    # Check if all model files exist before loading
+    model_path = os.path.join(savepath, filename[0])
+    encoder_path = os.path.join(savepath, filename[1])
+    lb_path = os.path.join(savepath, filename[2])
+
+    if os.path.isfile(model_path) and os.path.isfile(encoder_path) and os.path.isfile(lb_path):
+        # Load the models and encoder
+        model = pickle.load(open(model_path, "rb"))
+        encoder = pickle.load(open(encoder_path, "rb"))
+        lb = pickle.load(open(lb_path, "rb"))
     else:
         raise FileNotFoundError("One or more required model files are missing.")
 
@@ -130,4 +133,3 @@ async def ingest_data(inference: InputData):
 
 if __name__ == '__main__':
     pass
-
