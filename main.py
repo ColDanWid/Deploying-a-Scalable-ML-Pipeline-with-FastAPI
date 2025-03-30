@@ -1,4 +1,3 @@
-# Put the code for your API here.
 from fastapi import FastAPI, HTTPException
 from typing import Union, Optional
 # BaseModel from Pydantic is used to define data objects
@@ -7,7 +6,7 @@ import pandas as pd
 import os, pickle
 from ml.data import process_data
 
- # path to saved artifacts
+# path to saved artifacts
 savepath = './model'
 filename = ['trained_model.pkl', 'encoder.pkl', 'labelizer.pkl']
 
@@ -48,7 +47,6 @@ class InputData(BaseModel):
                                     }
                         }
 
-
 # instantiate FastAPI app
 app = FastAPI(  title="Inference API",
                 description="An API that takes a sample and runs an inference",
@@ -58,17 +56,19 @@ app = FastAPI(  title="Inference API",
 @app.on_event("startup")
 async def startup_event(): 
     global model, encoder, lb
-    # if saved model exits, load the model from disk
-    if os.path.isfile(os.path.join(savepath,filename[0])):
-        model = pickle.load(open(os.path.join(savepath,filename[0]), "rb"))
-        encoder = pickle.load(open(os.path.join(savepath,filename[1]), "rb"))
-        lb = pickle.load(open(os.path.join(savepath,filename[2]), "rb"))
-
+    # if saved model exists, load the model from disk
+    if os.path.isfile(os.path.join(savepath, filename[0])) and \
+       os.path.isfile(os.path.join(savepath, filename[1])) and \
+       os.path.isfile(os.path.join(savepath, filename[2])):
+        model = pickle.load(open(os.path.join(savepath, filename[0]), "rb"))
+        encoder = pickle.load(open(os.path.join(savepath, filename[1]), "rb"))
+        lb = pickle.load(open(os.path.join(savepath, filename[2]), "rb"))
+    else:
+        raise FileNotFoundError("One or more required model files are missing.")
 
 @app.get("/")
 async def greetings():
     return "Welcome to our model API"
-
 
 # This allows sending of data (our InferenceSample) via POST to the API.
 @app.post("/inference/")
@@ -103,14 +103,12 @@ async def ingest_data(inference: InputData):
                     "sex",
                     "native-country",
                     ]
-
-    # if saved model exits, load the model from disk
-    if os.path.isfile(os.path.join(savepath,filename[0])):
-        model = pickle.load(open(os.path.join(savepath,filename[0]), "rb"))
-        encoder = pickle.load(open(os.path.join(savepath,filename[1]), "rb"))
-        lb = pickle.load(open(os.path.join(savepath,filename[2]), "rb"))
-        
-    sample,_,_,_ = process_data(
+    
+    # Ensure the encoder and lb are loaded
+    if not encoder or not lb:
+        raise HTTPException(status_code=500, detail="Model encoder or labelizer not loaded correctly.")
+    
+    sample, _, _, _ = process_data(
                                 sample, 
                                 categorical_features=cat_features, 
                                 training=False, 
@@ -122,15 +120,13 @@ async def ingest_data(inference: InputData):
     prediction = model.predict(sample)
 
     # convert prediction to label and add to data output
-    if prediction[0]>0.5:
+    if prediction[0] > 0.5:
         prediction = '>50K'
     else:
         prediction = '<=50K', 
     data['prediction'] = prediction
 
-
     return data
-
 
 if __name__ == '__main__':
     pass
