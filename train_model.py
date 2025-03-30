@@ -1,189 +1,110 @@
-import pytest, os, logging, pickle
-import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.exceptions import NotFittedError
+import pickle, os
+import pandas as pd
+from data import process_data
+from model import train_model, compute_model_metrics, inference, compute_slices
+from model import compute_confusion_matrix
+import logging
 
-from ml.model import inference, compute_model_metrics, compute_confusion_matrix
-from ml.data import process_data
-
-
-"""
-Fixture - The test functions will 
-use the return of data() as an argument
-"""
-@pytest.fixture(scope="module")
-def data():
-    # code to load in the data.
-    datapath = "./data/census.csv"
-    return pd.read_csv(datapath)
-
-
-@pytest.fixture(scope="module")
-def path():
-    return "./data/census.csv"
-
-
-@pytest.fixture(scope="module")
-def features():
+def remove_if_exists(filename):
     """
-    Fixture - will return the categorical features as argument
+    Delete a file if it exists.
+    input:
+        filename: str - path to the file to be removed
+    output:
+        None
     """
-    cat_features = [    "workclass",
-                        "education",
-                        "marital-status",
-                        "occupation",
-                        "relationship",
-                        "race",
-                        "sex",
-                        "native-country"]
-    return cat_features
+    if os.path.exists(filename):
+        os.remove(filename)
 
 
-@pytest.fixture(scope="module")
-def train_dataset(data, features):
-    """
-    Fixture - returns cleaned train dataset to be used for model testing
-    """
-    train, test = train_test_split( data, 
+# Initialize logging
+logging.basicConfig(filename='journal.log',
+                    level=logging.INFO,
+                    filemode='a',
+                    format='%(name)s - %(levelname)s - %(message)s')
+
+# Add code to load in the data.
+datapath = "../data/census.csv"
+data = pd.read_csv(datapath)
+
+# Optional enhancement, use K-fold cross validation instead of a
+# train-test split using stratify due to class imbalance
+train, test = train_test_split( data, 
                                 test_size=0.20, 
                                 random_state=10, 
                                 stratify=data['salary']
                                 )
-    X_train, y_train, encoder, lb = process_data(
-                                            train,
-                                            categorical_features=features,
-                                            label="salary",
-                                            training=True
-                                        )
-    return X_train, y_train
+
+cat_features = [
+    "workclass",
+    "education",
+    "marital-status",
+    "occupation",
+    "relationship",
+    "race",
+    "sex",
+    "native-country",
+]
+
+X_train, y_train, encoder, lb = process_data(
+    train,
+    categorical_features=cat_features,
+    label="salary",
+    training=True
+)
+
+# Proces the test data with the process_data function.
+# Set train flag = False - We use the encoding from the train set
+X_test, y_test, encoder, lb = process_data(
+    test,
+    categorical_features=cat_features,
+    label="salary",
+    training=False,
+    encoder=encoder,
+    lb=lb
+)
+
+# check if trained model already exists
+savepath = '../model'
+filename = ['trained_model.pkl', 'encoder.pkl', 'labelizer.pkl']
+
+# if saved model exits, load the model from disk
+if os.path.isfile(os.path.join(savepath,filename[0])):
+        model = pickle.load(open(os.path.join(savepath,filename[0]), 'rb'))
+        encoder = pickle.load(open(os.path.join(savepath,filename[1]), 'rb'))
+        lb = pickle.load(open(os.path.join(savepath,filename[2]), 'rb'))
+
+# Else Train and save a model.
+else:
+    model = train_model(X_train, y_train)
+    # save model  to disk in ./model folder
+    pickle.dump(model, open(os.path.join(savepath,filename[0]), 'wb'))
+    pickle.dump(encoder, open(os.path.join(savepath,filename[1]), 'wb'))
+    pickle.dump(lb, open(os.path.join(savepath,filename[2]), 'wb'))
+    logging.info(f"Model saved to disk: {savepath}")
 
 
-"""
-Test methods
-"""
-def test_import_data(path):
-    """
-    Test presence and shape of dataset file
-    """
-    try:
-        df = pd.read_csv(path)
+# evaluate trained model on test set
+preds = inference(model, X_test)
+precision, recall, fbeta = compute_model_metrics(y_test, preds)
 
-    except FileNotFoundError as err:
-        logging.error("File not found")
-        raise err
+logging.info(f"Classification target labels: {list(lb.classes_)}")
+logging.info(
+    f"precision:{precision:.3f}, recall:{recall:.3f}, fbeta:{fbeta:.3f}")
 
-    # Check the df shape
-    try:
-        assert df.shape[0] > 0
-        assert df.shape[1] > 0
+cm = compute_confusion_matrix(y_test, preds, labels=list(lb.classes_))
 
-    except AssertionError as err:
-        logging.error(
-        "Testing import_data: The file doesn't appear to have rows and columns")
-        raise err
+logging.info(f"Confusion matrix:\n{cm}")
 
+# Compute performance on slices for categorical features
+# save results in a new txt file
+slice_savepath = "./slice_output.txt"
+remove_if_exists(slice_savepath)
 
-def test_features(data, features):
-    """
-    Check that categorical features are in dataset
-    """
-    try:
-        assert sorted(set(data.columns).intersection(features)) == sorted(features)
-    except AssertionError as err:
-        logging.error(
-        "Testing dataset: Features are missing in the data columns")
-        raise err
-
-
-def test_is_model():
-    """
-    Check saved model is present
-    """
-    savepath = "./model/trained_model.pkl"
-    if os.path.isfile(savepath):
-        try:
-            _ = pickle.load(open(savepath, 'rb'))
-        except Exception as err:
-            logging.error(
-            "Testing saved model: Saved model does not appear to be valid")
-            raise err
-    else:
-        pass
-
-
-def test_is_fitted_model(train_dataset):
-    """
-    Check saved model is fitted
-    """
-
-    X_train, y_train = train_dataset
-    savepath = "./model/trained_model.pkl"
-    model = pickle.load(open(savepath, 'rb'))
-
-    try:
-        model.predict(X_train)
-    except NotFittedError as err:
-        logging.error(
-        f"Model is not fit, error {err}")
-        raise err
-
-
-def test_inference(train_dataset):
-    """
-    Check inference function
-    """
-    X_train, y_train = train_dataset
-
-    savepath = "./model/trained_model.pkl"
-    if os.path.isfile(savepath):
-        model = pickle.load(open(savepath, 'rb'))
-
-        try:
-            preds = inference(model, X_train)
-        except Exception as err:
-            logging.error(
-            "Inference cannot be performed on saved model and train data")
-            raise err
-    else:
-        pass
-
-
-def test_compute_model_metrics(train_dataset):
-    """
-    Check calculation of performance metrics function
-    """
-    X_train, y_train = train_dataset
-
-    savepath = "./model/trained_model.pkl"
-    if os.path.isfile(savepath):
-        model = pickle.load(open(savepath, 'rb'))
-        preds = inference(model, X_train)
-
-        try:
-            precision, recall, fbeta = compute_model_metrics(y_train, preds)
-        except Exception as err:
-            logging.error(
-            "Performance metrics cannot be calculated on train data")
-            raise err
-    else:
-        pass
-
-def test_compute_confusion_matrix(train_dataset):
-    """
-    Check calculation of confusion matrix function
-    """
-    X_train, y_train = train_dataset
-
-    savepath = "./model/trained_model.pkl"
-    if os.path.isfile(savepath):
-        model = pickle.load(open(savepath, 'rb'))
-        preds = inference(model, X_train)
-
-        try:
-            cm = compute_confusion_matrix(y_train, preds)
-        except Exception as err:
-            logging.error(
-            "Confusion matrix cannot be calculated on train data")
-            raise err
-    else:
-        pass
+# iterate through the categorical features and save results to log and txt file
+for feature in cat_features:
+    performance_df = compute_slices(test, feature, y_test, preds)
+    performance_df.to_csv(slice_savepath,  mode='a', index=False)
+    logging.info(f"Performance on slice {feature}")
+    logging.info(performance_df)
