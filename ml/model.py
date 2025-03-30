@@ -1,5 +1,5 @@
 import pickle
-ffrom sklearn.metrics import fbeta_score, precision_score, recall_score, confusion_matrix
+from sklearn.metrics import fbeta_score, precision_score, recall_score, confusion_matrix
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV
 import pandas as pd
